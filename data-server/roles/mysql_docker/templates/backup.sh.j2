@@ -1,0 +1,19 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Backup toàn bộ database bằng mysqldump, nén gzip, giữ {{ mysql_backup_keep_days }} ngày
+set -euo pipefail
+
+BACKUP_DIR={{ mysql_dir }}/backup
+FILE="$BACKUP_DIR/all-databases-$(date +%Y%m%d-%H%M%S).sql.gz"
+
+# Đọc mật khẩu root từ .env (không ghi mật khẩu vào script)
+MYSQL_PWD=$(grep '^MYSQL_ROOT_PASSWORD=' {{ mysql_dir }}/.env | cut -d= -f2-)
+export MYSQL_PWD
+
+docker exec -e MYSQL_PWD mysql mysqldump -uroot \
+  --all-databases --single-transaction --routines --triggers --events \
+  | gzip > "$FILE.tmp"
+mv "$FILE.tmp" "$FILE"
+
+find "$BACKUP_DIR" -name 'all-databases-*.sql.gz' -mtime +{{ mysql_backup_keep_days }} -delete
+echo "$(date '+%F %T') OK $FILE ($(du -h "$FILE" | cut -f1))"

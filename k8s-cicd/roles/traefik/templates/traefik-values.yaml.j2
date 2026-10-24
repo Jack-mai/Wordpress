@@ -1,0 +1,33 @@
+# {{ ansible_managed }}
+deployment:
+  replicas: 2
+
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+
+providers:
+  kubernetesIngress:
+    enabled: true
+    # Cho Ingress hiện Address = IP của Traefik
+    publishedService:
+      enabled: true
+
+service:
+  type: LoadBalancer
+  annotations:
+    metallb.io/loadBalancerIPs: "{{ ingress_ip }}"
+  spec:
+    # Giữ IP thật của client trong log
+    externalTrafficPolicy: Local
+
+# Rải 2 pod Traefik ra 2 node khác nhau
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik

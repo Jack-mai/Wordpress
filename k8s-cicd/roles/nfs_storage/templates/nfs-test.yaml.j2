@@ -1,0 +1,32 @@
+# {{ ansible_managed }}
+# PVC + pod thử: ghi 1 file lên NFS rồi đọc lại. Ansible xóa sau khi kiểm tra.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-test
+  namespace: default
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: {{ nfs_storageclass }}
+  resources:
+    requests:
+      storage: 1Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nfs-test
+  namespace: default
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test
+      image: busybox:1.37
+      command: ["sh", "-c", "date > /data/ok.txt && cat /data/ok.txt"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: nfs-test

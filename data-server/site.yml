@@ -1,0 +1,45 @@
+---
+# Máy dữ liệu dùng chung cho K8s: MySQL (Docker Compose) + NFS file share
+#   ansible-playbook site.yml --ask-vault-pass               # cả hai
+#   ansible-playbook site.yml --ask-vault-pass --tags mysql  # chỉ MySQL
+#   ansible-playbook site.yml --tags nfs                     # chỉ NFS
+
+- name: Máy dữ liệu (MySQL + NFS)
+  hosts: dataserver
+  gather_facts: true
+  vars_files:
+    - vars/secrets.yml
+  pre_tasks:
+    - name: Kiểm tra đã điền mật khẩu MySQL
+      ansible.builtin.assert:
+        that:
+          - mysql_root_password | length >= 8
+          - "'DoiMatKhau' not in mysql_root_password"
+          - mysql_apps | map(attribute='password_var') | select('in', vars) | list | length == mysql_apps | length
+        fail_msg: "Hãy điền vars/secrets.yml (copy từ vars/secrets.yml.example), đủ mật khẩu cho từng app trong mysql_apps"
+      tags: mysql
+  roles:
+    - { role: mysql_docker, tags: [mysql] }
+    - { role: nfs_server, tags: [nfs] }
+
+# Kiểm tra từ máy Ansible (cùng dải 10.10.90.x): MySQL và NFS có mở ra mạng không
+- name: Kiểm tra port từ máy Ansible
+  hosts: dataserver
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Port MySQL {{ mysql_port }} truy cập được
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ mysql_port }}"
+        timeout: 15
+      delegate_to: localhost
+      tags: mysql
+
+    - name: Port NFS 2049 truy cập được
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 2049
+        timeout: 15
+      delegate_to: localhost
+      tags: nfs

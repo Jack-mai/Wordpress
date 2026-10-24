@@ -1,0 +1,75 @@
+---
+# Secret không đưa lên Git -> Ansible tạo sẵn, manifest trong repo GitOps chỉ tham chiếu tên
+# Thông tin kết nối DB nằm trong secret -> repo GitOps không chứa IP/mật khẩu DB
+- name: Secret kết nối database (wordpress-db)
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl -n wordpress create secret generic wordpress-db \
+      --from-literal=db-host='{{ wordpress_db_host }}:{{ wordpress_db_port }}' \
+      --from-literal=db-name='{{ wordpress_db_name }}' \
+      --from-literal=db-user='{{ wordpress_db_user }}' \
+      --from-literal=db-password='{{ wordpress_db_password }}' \
+      --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  no_log: true
+  register: wordpress_bootstrap_db_secret
+  changed_when: "'configured' in wordpress_bootstrap_db_secret.stdout or 'created' in wordpress_bootstrap_db_secret.stdout"
+
+# Kiểm tra pod trong K8s đăng nhập được DB trước khi deploy WordPress
+- name: Xóa pod kiểm tra DB cũ (nếu có)
+  ansible.builtin.command: kubectl -n wordpress delete pod db-check --ignore-not-found --wait=true
+  changed_when: false
+
+- name: Kiểm tra kết nối từ K8s tới {{ wordpress_db_host }}:{{ wordpress_db_port }}
+  ansible.builtin.command: >-
+    kubectl -n wordpress run db-check --rm -i --restart=Never --quiet
+    --image=mysql:8.4
+    --env=MYSQL_PWD={{ wordpress_db_password }}
+    --command -- mysql -h {{ wordpress_db_host }} -P {{ wordpress_db_port }}
+    -u {{ wordpress_db_user }} {{ wordpress_db_name }}
+    -e "SELECT VERSION() AS version, CURRENT_USER() AS user, DATABASE() AS db;"
+  register: wordpress_bootstrap_db_check
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Kết quả kiểm tra DB
+  ansible.builtin.assert:
+    that: wordpress_bootstrap_db_check.rc == 0
+    success_msg: "{{ wordpress_bootstrap_db_check.stdout_lines }}"
+    fail_msg: >-
+      K8s KHÔNG đăng nhập được MySQL {{ wordpress_db_host }}:{{ wordpress_db_port }}
+      (kiểm tra project data-server đã chạy, mật khẩu 2 bên giống nhau):
+      {{ wordpress_bootstrap_db_check.stderr | default('') }}
+
+- name: Restart WordPress nếu thông tin DB thay đổi
+  ansible.builtin.command: kubectl -n wordpress rollout restart deploy/wordpress
+  when: wordpress_bootstrap_db_secret is changed
+  failed_when: false
+  changed_when: true
+
+# Package GHCR mặc định là private -> cluster cần secret để kéo image
+- name: Secret kéo image từ GHCR (pull)
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl -n wordpress create secret docker-registry ghcr-pull \
+      --docker-server=ghcr.io \
+      --docker-username={{ github_user }} \
+      --docker-password={{ github_token }} \
+      --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  no_log: true
+  changed_when: false
+
+- name: Tạo Argo CD Application cho WordPress
+  ansible.builtin.template:
+    src: wordpress-application.yaml.j2
+    dest: /root/cicd/wordpress-application.yaml
+    mode: "0600"
+
+- name: Áp dụng Argo CD Application
+  ansible.builtin.command: kubectl apply -f /root/cicd/wordpress-application.yaml
+  register: wordpress_app
+  changed_when: "'created' in wordpress_app.stdout or 'configured' in wordpress_app.stdout"

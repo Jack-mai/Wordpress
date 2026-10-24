@@ -1,0 +1,32 @@
+---
+- name: Tạo values Argo CD
+  ansible.builtin.template:
+    src: argocd-values.yaml.j2
+    dest: /root/cicd/argocd-values.yaml
+    mode: "0600"
+
+- name: Cài Argo CD
+  ansible.builtin.command: >-
+    helm upgrade --install argocd argo/argo-cd
+    --namespace argocd
+    --version {{ argocd_chart_version }}
+    -f /root/cicd/argocd-values.yaml
+    --wait --timeout 15m
+  changed_when: true
+
+# Cho Argo CD đọc repo GitOps (cần nếu repo private, để sẵn cũng không hại)
+- name: Tạo credential repo GitOps cho Argo CD
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl -n argocd create secret generic repo-k8s-gitops \
+      --from-literal=type=git \
+      --from-literal=url={{ gitops_repo_url }} \
+      --from-literal=username={{ github_user }} \
+      --from-literal=password={{ github_token }} \
+      --dry-run=client -o yaml \
+    | kubectl label --local -f - argocd.argoproj.io/secret-type=repository -o yaml \
+    | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  no_log: true
+  changed_when: false

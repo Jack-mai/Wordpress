@@ -1,0 +1,94 @@
+# {{ ansible_managed }}
+controller:
+  jenkinsUrl: "http://{{ jenkins_host }}/"
+
+  admin:
+    createSecret: false
+    existingSecret: jenkins-admin
+    userKey: jenkins-admin-user
+    passwordKey: jenkins-admin-password
+
+  # Các key trong secret này dùng được trong JCasC dưới dạng ${github-username}, ${github-token}
+  existingSecret: jenkins-ci-secrets
+
+  additionalPlugins:
+    - job-dsl:latest
+    - pipeline-graph-view:latest
+    - timestamper:latest
+
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hostName: {{ jenkins_host }}
+    pathType: Prefix
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 3Gi
+
+  JCasC:
+    security:
+      apiToken:
+        creationOfLegacyTokenEnabled: false
+        tokenGenerationOnCreationEnabled: false
+        usageStatisticsEnabled: false
+      # Job DSL chạy từ JCasC do admin quản lý -> không cần duyệt script
+      globalJobDslSecurityConfiguration:
+        useScriptSecurity: false
+
+    configScripts:
+      credentials: |
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - usernamePassword:
+                      scope: GLOBAL
+                      id: github
+                      description: "GitHub user + PAT (clone repo, push GitOps)"
+                      username: "${github-username}"
+                      password: "${github-token}"
+
+      welcome: |
+        jenkins:
+          systemMessage: "Jenkins CI - cấu hình bằng code (JCasC). Sửa trong Ansible, không sửa trên giao diện."
+
+      jobs: |
+        jobs:
+          - script: |
+              pipelineJob('wordpress-app') {
+                description('Build image WordPress -> push GHCR -> cập nhật repo GitOps (Argo CD tự deploy)')
+                logRotator { numToKeep(30) }
+                properties {
+                  disableConcurrentBuilds()
+                  pipelineTriggers {
+                    triggers {
+                      // Jenkins nằm trong mạng nội bộ, GitHub không gọi webhook vào được -> poll mỗi 2 phút
+                      pollSCM { scmpoll_spec('H/2 * * * *') }
+                    }
+                  }
+                }
+                definition {
+                  cpsScm {
+                    scm {
+                      git {
+                        remote {
+                          url('{{ app_repo_url }}')
+                          credentials('github')
+                        }
+                        branch('*/{{ app_repo_branch }}')
+                      }
+                    }
+                    scriptPath('Jenkinsfile')
+                    lightweight(true)
+                  }
+                }
+              }
+
+persistence:
+  enabled: true
+  size: {{ jenkins_pvc_size }}

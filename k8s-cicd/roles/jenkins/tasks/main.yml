@@ -1,0 +1,54 @@
+---
+- name: Secret tài khoản admin Jenkins
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl -n jenkins create secret generic jenkins-admin \
+      --from-literal=jenkins-admin-user=admin \
+      --from-literal=jenkins-admin-password='{{ jenkins_admin_password }}' \
+      --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  no_log: true
+  changed_when: false
+
+- name: Secret GitHub cho JCasC
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl -n jenkins create secret generic jenkins-ci-secrets \
+      --from-literal=github-username={{ github_user }} \
+      --from-literal=github-token={{ github_token }} \
+      --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  no_log: true
+  changed_when: false
+
+# BuildKit trong pod agent dùng secret này để push image lên GHCR
+- name: Secret đăng nhập GHCR (push)
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl -n jenkins create secret docker-registry ghcr-push \
+      --docker-server=ghcr.io \
+      --docker-username={{ github_user }} \
+      --docker-password={{ github_token }} \
+      --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  no_log: true
+  changed_when: false
+
+- name: Tạo values Jenkins
+  ansible.builtin.template:
+    src: jenkins-values.yaml.j2
+    dest: /root/cicd/jenkins-values.yaml
+    mode: "0600"
+
+# Lần đầu Jenkins tải plugin từ Internet nên khá lâu (5-15 phút)
+- name: Cài Jenkins
+  ansible.builtin.command: >-
+    helm upgrade --install jenkins jenkins/jenkins
+    --namespace jenkins
+    --version {{ jenkins_chart_version }}
+    -f /root/cicd/jenkins-values.yaml
+    --wait --timeout 20m
+  changed_when: true

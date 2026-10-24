@@ -1,0 +1,26 @@
+# {{ ansible_managed }}
+services:
+  mysql:
+    image: {{ mysql_image }}
+    container_name: mysql
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # root chỉ đăng nhập được từ trong container (docker exec), không mở ra mạng
+      MYSQL_ROOT_HOST: localhost
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "{{ mysql_port }}:3306"
+    volumes:
+      - ./data:/var/lib/mysql
+      - ./conf.d:/etc/mysql/conf.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535

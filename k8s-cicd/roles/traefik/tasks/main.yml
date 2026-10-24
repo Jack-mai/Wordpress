@@ -1,0 +1,23 @@
+---
+- name: Tạo values Traefik
+  ansible.builtin.template:
+    src: traefik-values.yaml.j2
+    dest: /root/cicd/traefik-values.yaml
+    mode: "0600"
+
+- name: Cài Traefik (Ingress controller)
+  ansible.builtin.command: >-
+    helm upgrade --install traefik traefik/traefik
+    --namespace traefik
+    {{ '--version ' + traefik_chart_version if traefik_chart_version | length > 0 else '' }}
+    -f /root/cicd/traefik-values.yaml
+    --wait --timeout 10m
+  changed_when: true
+
+- name: Kiểm tra Traefik nhận IP {{ ingress_ip }}
+  ansible.builtin.command: kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+  register: traefik_ip
+  until: traefik_ip.stdout == ingress_ip
+  retries: 12
+  delay: 5
+  changed_when: false
