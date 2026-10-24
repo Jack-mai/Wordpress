@@ -1,0 +1,84 @@
+---
+# Cài WordPress + CI/CD lên cluster K8s có sẵn. Dữ liệu (MySQL + NFS) nằm ở máy dữ liệu (project data-server)
+#
+# PHẦN A - WordPress chạy trên K8s (chưa có Jenkins):
+#   ansible-playbook cicd.yml --ask-vault-pass --skip-tags jenkins
+#   -> NFS client, StorageClass, MetalLB, Traefik, metrics-server, Argo CD, secret DB,
+#      Argo CD Application deploy Helm chart gitops/wordpress
+#
+# PHẦN B - thêm CI/CD (Jenkins build image -> GHCR -> sửa values-prod.yaml -> Argo CD deploy):
+#   ansible-playbook cicd.yml --ask-vault-pass --tags jenkins
+#
+# Chạy riêng từng phần khác bằng tag: storage, nfs, metallb, traefik, metrics, argocd, wordpress
+
+# Mọi node phải có NFS client thì pod mới mount được volume NFS
+- name: Cài NFS client trên các node K8s
+  hosts: k8s_cluster
+  gather_facts: false
+  tags: [nfs]
+  tasks:
+    - name: Cài nfs-common
+      ansible.builtin.apt:
+        name: nfs-common
+        state: present
+        update_cache: true
+        lock_timeout: 600
+
+- name: Triển khai nền tảng CI/CD
+  hosts: masters[0]
+  gather_facts: false
+  vars_files:
+    - vars/cicd.yml
+    - vars/secrets.yml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  pre_tasks:
+    - name: Kiểm tra đã điền secrets
+      ansible.builtin.assert:
+        that:
+          - github_token is defined
+          - not github_token.startswith('ghp_xxxx')
+          - jenkins_admin_password | length >= 8
+          - wordpress_db_password is defined and wordpress_db_password | length >= 8
+        fail_msg: "Hãy điền vars/secrets.yml (copy từ vars/secrets.yml.example)"
+      tags: always
+
+    - name: Thư mục chứa manifest/values sinh ra
+      ansible.builtin.file:
+        path: /root/cicd
+        state: directory
+        mode: "0700"
+      tags: always
+
+  roles:
+    - { role: cicd_tools, tags: [always] }
+    - { role: storage, tags: [storage] }
+    - { role: nfs_storage, tags: [nfs] }
+    - { role: metallb, tags: [metallb] }
+    - { role: traefik, tags: [traefik] }
+    - { role: metrics_server, tags: [metrics] }
+    - { role: argocd, tags: [argocd] }
+    - { role: jenkins, tags: [jenkins] }
+    - { role: wordpress_bootstrap, tags: [wordpress] }
+
+  post_tasks:
+    - name: Lấy mật khẩu admin Argo CD
+      ansible.builtin.shell: |
+        set -o pipefail
+        kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+      args:
+        executable: /bin/bash
+      register: argocd_pw
+      changed_when: false
+      failed_when: false
+      no_log: true
+      tags: always
+
+    - name: Thông tin truy cập
+      ansible.builtin.debug:
+        msg:
+          - "WordPress: http://{{ wordpress_host }}  (Argo CD deploy xong trong 2-3 phút)"
+          - "Argo CD  : http://{{ argocd_host }}    (admin / {{ argocd_pw.stdout | default('xem secret argocd-initial-admin-secret') }})"
+          - "Jenkins  : http://{{ jenkins_host }}   (Phần B - admin / mật khẩu trong vars/secrets.yml)"
+          - "Ingress IP: {{ ingress_ip }}"
+      tags: always

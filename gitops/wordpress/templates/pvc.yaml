@@ -1,0 +1,18 @@
+{{- if not .Values.uploads.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-uploads
+  labels:
+    {{- include "wordpress.labels" . | nindent 4 }}
+  annotations:
+    # Gỡ chart / xóa khỏi Git cũng KHÔNG xóa PVC (ảnh vẫn còn trên NFS)
+    helm.sh/resource-policy: keep
+    argocd.argoproj.io/sync-options: Delete=false
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: {{ .Values.uploads.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.uploads.size }}
+{{- end }}

@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "wordpress.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # Uploads trên NFS (ReadWriteMany) -> nhiều pod dùng chung, deploy không gián đoạn
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "wordpress.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "wordpress.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.spreadAcrossNodes }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "wordpress.selectorLabels" . | nindent 20 }}
+      {{- end }}
+      # Thư mục NFS do driver tạo thuộc root -> chuyển cho www-data (uid 33) để WordPress ghi được ảnh
+      initContainers:
+        - name: fix-uploads-permission
+          image: busybox:1.37
+          command: ["sh", "-c", "chown 33:33 /uploads && chmod 775 /uploads"]
+          volumeMounts:
+            - name: uploads
+              mountPath: /uploads
+      containers:
+        - name: wordpress
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            # Kết nối MySQL ngoài K8s, thông tin nằm trong secret (không nằm trong Git)
+            - name: WORDPRESS_DB_HOST
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.database.existingSecret }}, key: db-host }
+            - name: WORDPRESS_DB_NAME
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.database.existingSecret }}, key: db-name }
+            - name: WORDPRESS_DB_USER
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.database.existingSecret }}, key: db-user }
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.database.existingSecret }}, key: db-password }
+            {{- with .Values.wpConfigExtra }}
+            - name: WORDPRESS_CONFIG_EXTRA
+              value: {{ . | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /wp-login.php
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: uploads
+              mountPath: /var/www/html/wp-content/uploads
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: {{ include "wordpress.uploadsClaim" . }}

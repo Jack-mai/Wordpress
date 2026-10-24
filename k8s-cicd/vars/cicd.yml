@@ -1,0 +1,58 @@
+---
+# ====================== CẤU HÌNH CI/CD ======================
+
+# ---- MetalLB: dải IP cấp cho Service type LoadBalancer ----
+# PHẢI là các IP còn trống trong 10.10.90.0/24 (không trùng node, VIP .150, máy .140, máy MySQL .149)
+metallb_ip_range: "10.10.90.151-10.10.90.159"
+# IP cố định cho Traefik (cửa vào duy nhất cho mọi web: Jenkins, Argo CD, WordPress)
+ingress_ip: "10.10.90.151"
+
+# ---- Tên miền ----
+# Mặc định dùng nip.io: jenkins.10.10.90.151.nip.io tự trỏ về 10.10.90.151, không cần DNS nội bộ.
+# Nếu có DNS riêng (vd k8s.congty.local) thì đổi ở đây và tạo bản ghi *.k8s.congty.local -> ingress_ip
+base_domain: "{{ ingress_ip }}.nip.io"
+jenkins_host: "jenkins.{{ base_domain }}"
+argocd_host: "argocd.{{ base_domain }}"
+wordpress_host: "wordpress.{{ base_domain }}"
+
+# ---- GitHub ----
+github_user: "Jack-mai"
+
+# Repo này (Ansible + Helm chart WordPress). Argo CD đọc Helm chart ở gitops_path
+gitops_repo_url: "https://github.com/{{ github_user }}/Wordpress.git"
+gitops_repo_branch: "main"
+gitops_path: "gitops/wordpress"
+gitops_values_file: "values-prod.yaml"
+
+# Phần B (CI/CD): repo code WordPress (Dockerfile + Jenkinsfile), Jenkins build từ đây
+app_repo_url: "https://github.com/{{ github_user }}/wordpress-app.git"
+app_repo_branch: "main"
+# Image trên GHCR (tên phải viết thường)
+app_image: "ghcr.io/{{ github_user | lower }}/wordpress-app"
+
+# ---- Database cho WordPress (MySQL trên máy dữ liệu, project data-server) ----
+# Đổi DB chỉ cần sửa ở đây rồi chạy: ansible-playbook cicd.yml --tags wordpress
+wordpress_db_host: "10.10.90.149"
+wordpress_db_port: 3306
+wordpress_db_name: "wordpress"
+wordpress_db_user: "wordpress"
+# Mật khẩu: wordpress_db_password trong vars/secrets.yml
+
+# ---- File share NFS (máy dữ liệu, project data-server) ----
+# WordPress lưu uploads lên NFS -> chạy được nhiều replica (ReadWriteMany)
+nfs_server: "10.10.90.149"
+nfs_share: "/srv/nfs/k8s"
+nfs_storageclass: "nfs-csi"
+
+# ---- Phiên bản (đã kiểm tra 10/2026) ----
+local_path_version: "v0.0.36"
+metallb_version: "v0.15.3"
+metrics_server_version: "v0.8.1"
+# Helm chart: để "" = bản mới nhất
+traefik_chart_version: ""
+argocd_chart_version: "10.10.5"
+jenkins_chart_version: "5.9.70"
+csi_nfs_chart_version: "4.13.5"
+
+# ---- Dung lượng ----
+jenkins_pvc_size: "20Gi"

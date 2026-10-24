@@ -1,0 +1,19 @@
+# ===== Môi trường PRODUCTION =====
+# Argo CD deploy chart này với file values này (namespace wordpress).
+#
+# Khối image: Phần A dùng image WordPress chính thức.
+# Phần B (CI/CD): Jenkins TỰ SỬA 2 dòng repository/tag sau mỗi lần build - không sửa tay.
+image:
+  repository: wordpress
+  tag: "php8.3-apache"
+
+imagePullSecrets:
+  - name: ghcr-pull
+
+replicaCount: 3
+
+ingress:
+  host: wordpress.10.10.90.151.nip.io
+
+uploads:
+  size: 20Gi

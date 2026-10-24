@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+[mysqld]
+bind-address                   = 0.0.0.0
+character-set-server           = utf8mb4
+collation-server               = utf8mb4_unicode_ci
+max_connections                = {{ mysql_max_connections }}
+innodb_buffer_pool_size        = {{ mysql_innodb_buffer_pool_size }}
+innodb_flush_log_at_trx_commit = 1
+# Không tra DNS ngược khi client kết nối (nhanh hơn, user khai báo theo IP)
+skip-name-resolve
+# Binlog để khôi phục tới thời điểm bất kỳ (point-in-time recovery), giữ 7 ngày
+log_bin                        = mysql-bin
+binlog_expire_logs_seconds     = 604800
+slow_query_log                 = 1
+long_query_time                = 2

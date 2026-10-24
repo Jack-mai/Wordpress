@@ -1,0 +1,48 @@
+# Giá trị mặc định của chart. Mỗi môi trường ghi đè bằng file riêng (values-prod.yaml...)
+
+replicaCount: 3
+
+image:
+  repository: wordpress          # image chính thức trên Docker Hub
+  tag: "php8.3-apache"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []             # vd: [{name: ghcr-pull}] khi dùng image private trên GHCR
+
+# ---- Database: MySQL NGOÀI K8s ----
+# Secret do Ansible (k8s-cicd, tag wordpress) tạo, chứa 4 key: db-host, db-name, db-user, db-password
+database:
+  existingSecret: wordpress-db
+
+# ---- File upload: NFS NGOÀI K8s ----
+# PVC ReadWriteMany trên StorageClass nfs-csi -> thư mục trên máy NFS:
+#   <nfs_share>/<namespace>-<release>-uploads   (vd /srv/nfs/k8s/wordpress-wordpress-uploads)
+uploads:
+  storageClass: nfs-csi
+  size: 10Gi
+  existingClaim: ""              # dùng PVC có sẵn thay vì tạo mới
+
+ingress:
+  enabled: true
+  className: traefik
+  host: wordpress.local
+
+# Thêm dòng vào wp-config.php (vd chặn sửa code qua trang admin)
+wpConfigExtra: |
+  define('DISALLOW_FILE_EDIT', true);
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+# Giữ tối thiểu số pod khi bảo trì node (kubectl drain)
+pdb:
+  enabled: true
+  minAvailable: 2
+
+# Rải pod ra các node khác nhau
+spreadAcrossNodes: true
