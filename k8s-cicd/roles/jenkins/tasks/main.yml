@@ -44,6 +44,17 @@
     mode: "0600"
 
 # Lần đầu Jenkins tải plugin từ Internet nên khá lâu (5-15 phút)
+- name: Gỡ bản cài jenkins bị lỗi lần trước (nếu có)
+  ansible.builtin.shell: |
+    set -o pipefail
+    if helm list -n jenkins --failed --pending -q | grep -qx jenkins; then
+      helm uninstall jenkins -n jenkins --wait && echo REMOVED
+    fi
+  args:
+    executable: /bin/bash
+  register: helm_cleanup_jenkins
+  changed_when: "'REMOVED' in helm_cleanup_jenkins.stdout"
+
 - name: Cài Jenkins
   ansible.builtin.command: >-
     helm upgrade --install jenkins jenkins/jenkins
@@ -52,3 +63,14 @@
     -f /root/cicd/jenkins-values.yaml
     --wait --timeout 20m
   changed_when: true
+
+- name: Tạo Ingress Jenkins ({{ jenkins_path }})
+  ansible.builtin.template:
+    src: jenkins-ingress.yaml.j2
+    dest: /root/cicd/jenkins-ingress.yaml
+    mode: "0600"
+
+- name: Áp dụng Ingress Jenkins
+  ansible.builtin.command: kubectl apply -f /root/cicd/jenkins-ingress.yaml
+  register: jenkins_ingress
+  changed_when: "'created' in jenkins_ingress.stdout or 'configured' in jenkins_ingress.stdout"

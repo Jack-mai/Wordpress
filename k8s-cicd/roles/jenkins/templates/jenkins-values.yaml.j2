@@ -1,6 +1,8 @@
 # {{ ansible_managed }}
 controller:
-  jenkinsUrl: "http://{{ jenkins_host }}/"
+  # Jenkins chạy dưới đường dẫn con: https://{{ ingress_ip }}{{ jenkins_path }}
+  jenkinsUriPrefix: "{{ jenkins_path }}"
+  jenkinsUrl: "{{ public_url }}{{ jenkins_path }}/"
 
   admin:
     createSecret: false
@@ -16,11 +18,9 @@ controller:
     - pipeline-graph-view:latest
     - timestamper:latest
 
+  # Ingress theo đường dẫn do Ansible tạo (jenkins-ingress.yaml), không dùng ingress của chart
   ingress:
-    enabled: true
-    ingressClassName: traefik
-    hostName: {{ jenkins_host }}
-    pathType: Prefix
+    enabled: false
 
   resources:
     requests:

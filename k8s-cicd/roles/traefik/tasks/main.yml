@@ -5,6 +5,17 @@
     dest: /root/cicd/traefik-values.yaml
     mode: "0600"
 
+- name: Gỡ bản cài traefik bị lỗi lần trước (nếu có)
+  ansible.builtin.shell: |
+    set -o pipefail
+    if helm list -n traefik --failed --pending -q | grep -qx traefik; then
+      helm uninstall traefik -n traefik --wait && echo REMOVED
+    fi
+  args:
+    executable: /bin/bash
+  register: helm_cleanup_traefik
+  changed_when: "'REMOVED' in helm_cleanup_traefik.stdout"
+
 - name: Cài Traefik (Ingress controller)
   ansible.builtin.command: >-
     helm upgrade --install traefik traefik/traefik

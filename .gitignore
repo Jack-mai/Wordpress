@@ -1,0 +1,4 @@
+# Không đưa mật khẩu lên GitHub
+**/vars/secrets.yml
+*.retry
+.ansible/

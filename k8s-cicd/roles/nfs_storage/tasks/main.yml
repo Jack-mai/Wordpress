@@ -1,5 +1,16 @@
 ---
 # csi-driver-nfs: driver NFS chính thức của Kubernetes SIG Storage
+- name: Gỡ bản cài csi-driver-nfs bị lỗi lần trước (nếu có)
+  ansible.builtin.shell: |
+    set -o pipefail
+    if helm list -n kube-system --failed --pending -q | grep -qx csi-driver-nfs; then
+      helm uninstall csi-driver-nfs -n kube-system --wait && echo REMOVED
+    fi
+  args:
+    executable: /bin/bash
+  register: helm_cleanup_csi_driver_nfs
+  changed_when: "'REMOVED' in helm_cleanup_csi_driver_nfs.stdout"
+
 - name: Cài csi-driver-nfs {{ csi_nfs_chart_version }}
   ansible.builtin.command: >-
     helm upgrade --install csi-driver-nfs csi-driver-nfs/csi-driver-nfs

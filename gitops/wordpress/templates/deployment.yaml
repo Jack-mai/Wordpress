@@ -64,10 +64,10 @@ spec:
             - name: WORDPRESS_DB_PASSWORD
               valueFrom:
                 secretKeyRef: { name: {{ .Values.database.existingSecret }}, key: db-password }
-            {{- with .Values.wpConfigExtra }}
+            # Thêm vào wp-config.php: địa chỉ web + cấu hình tùy chọn
+            # (image chính thức đã tự nhận HTTPS qua header X-Forwarded-Proto của Traefik)
             - name: WORDPRESS_CONFIG_EXTRA
-              value: {{ . | quote }}
-            {{- end }}
+              value: {{ include "wordpress.configExtra" . | quote }}
           readinessProbe:
             httpGet:
               path: /wp-login.php

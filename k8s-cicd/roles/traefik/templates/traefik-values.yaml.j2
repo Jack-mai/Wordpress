@@ -13,6 +13,18 @@ providers:
     publishedService:
       enabled: true
 
+# Mọi truy cập http:// tự chuyển sang https:// (khai báo bằng tham số Traefik: ổn định qua các bản chart)
+additionalArguments:
+  - "--entryPoints.web.http.redirections.entryPoint.to=websecure"
+  - "--entryPoints.web.http.redirections.entryPoint.scheme=https"
+  - "--entryPoints.web.http.redirections.entryPoint.permanent=true"
+
+# Chứng chỉ mặc định cho mọi Ingress = chứng chỉ do CA nội bộ cấp cho {{ ingress_ip }}
+tlsStore:
+  default:
+    defaultCertificate:
+      secretName: {{ tls_secret_name }}
+
 service:
   type: LoadBalancer
   annotations:

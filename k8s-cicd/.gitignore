@@ -1,0 +1,4 @@
+vars/secrets.yml
+*.retry
+.ansible/
+internal-ca.crt

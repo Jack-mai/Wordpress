@@ -4,7 +4,7 @@ WordPress chạy trên cụm K8s (3 master + 3 worker). **Toàn bộ dữ liệu
 
 ```
                      Người dùng
-                         │  http://wordpress.10.10.90.151.nip.io
+                         │  https://10.10.90.151   (/argocd, /jenkins)
                          ▼
 ┌──────────────────── Cluster K8s ─────────────────────┐
 │  Traefik (IP ảo 10.10.90.151, MetalLB)               │
@@ -146,7 +146,7 @@ kubectl -n wordpress get pods,pvc,ingress -o wide
 # ingress wordpress: ADDRESS 10.10.90.151
 ```
 
-Mở trình duyệt: **http://wordpress.10.10.90.151.nip.io**, chọn ngôn ngữ, tạo tài khoản admin.
+Mở trình duyệt: **https://10.10.90.151**, chọn ngôn ngữ, tạo tài khoản admin.
 
 Thử upload một ảnh trong **Media > Add New**, rồi kiểm tra ảnh đã nằm trên máy dữ liệu:
 
@@ -154,12 +154,23 @@ Thử upload một ảnh trong **Media > Add New**, rồi kiểm tra ảnh đã 
 ssh administrator@10.10.90.149 "ls -R /srv/nfs/k8s/wordpress-wordpress-uploads | head"
 ```
 
-Argo CD: **http://argocd.10.10.90.151.nip.io**, đăng nhập `admin` với mật khẩu in ra cuối playbook. App `wordpress` phải ở trạng thái **Synced / Healthy**.
+Argo CD: **https://10.10.90.151/argocd**, đăng nhập `admin` với mật khẩu in ra cuối playbook. App `wordpress` phải ở trạng thái **Synced / Healthy**.
 
-> Máy không ra được Internet thì tên `*.nip.io` không phân giải được. Khi đó thêm vào file hosts (Windows: `C:\Windows\System32\drivers\etc\hosts`):
-> `10.10.90.151 wordpress.10.10.90.151.nip.io argocd.10.10.90.151.nip.io jenkins.10.10.90.151.nip.io`
+### Truy cập và HTTPS
 
-**Đến đây WordPress đã chạy trên K8s với dữ liệu ở `10.10.90.149`.**
+| Dịch vụ | Địa chỉ |
+|---|---|
+| WordPress | https://10.10.90.151 |
+| Argo CD | https://10.10.90.151/argocd |
+| Jenkins (Phần B) | https://10.10.90.151/jenkins |
+
+`http://` tự chuyển sang `https://`. Chứng chỉ do **CA nội bộ** (cert-manager) cấp cho IP `10.10.90.151`, vì CA công cộng không cấp chứng chỉ cho IP nội bộ. Máy chưa tin CA này sẽ thấy cảnh báo "Not secure"; vẫn vào được nhưng nên cài CA để có ổ khóa xanh.
+
+File CA nằm ở `k8s-cicd/internal-ca.crt` trên máy `.140`, sinh ra sau khi chạy playbook. Chép file này về máy tính, rồi:
+- **Windows:** nháy đúp file → Install Certificate → Local Machine → Place all certificates in → **Trusted Root Certification Authorities** → Finish. Khởi động lại trình duyệt.
+- **macOS:** mở bằng Keychain Access → System → nháy đúp chứng chỉ → Trust → **Always Trust**.
+- **Ubuntu:** `sudo cp internal-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates`.
+- **Firefox** dùng kho chứng chỉ riêng: Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import.
 
 ---
 
@@ -205,7 +216,7 @@ Lần đầu mất 10–20 phút vì Jenkins tải plugin từ Internet. Jenkins
 
 ## B3. Theo dõi lần build đầu tiên
 
-1. Mở **http://jenkins.10.10.90.151.nip.io**, đăng nhập `admin` / `jenkins_admin_password`.
+1. Mở **https://10.10.90.151/jenkins**, đăng nhập `admin` / `jenkins_admin_password`.
 2. Trong vòng 2 phút, job `wordpress-app` tự chạy build #1. Mở job, chọn **Console Output** để xem log.
 3. Build xong:
    - GitHub > Jack-mai > **Packages** có `wordpress-app`.
@@ -213,7 +224,7 @@ Lần đầu mất 10–20 phút vì Jenkins tải plugin từ Internet. Jenkins
 4. Trong 1–3 phút, Argo CD deploy image mới. Kiểm tra:
 
 ```bash
-curl http://wordpress.10.10.90.151.nip.io/?build-info
+curl -k https://10.10.90.151/?build-info
 # in ra tag vừa build, vd: 1a2b3c4-1
 kubectl -n wordpress get deploy wordpress -o jsonpath='{.spec.template.spec.containers[0].image}'
 ```

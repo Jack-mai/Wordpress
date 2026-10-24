@@ -7,13 +7,18 @@ metallb_ip_range: "10.10.90.151-10.10.90.159"
 # IP cố định cho Traefik (cửa vào duy nhất cho mọi web: Jenkins, Argo CD, WordPress)
 ingress_ip: "10.10.90.151"
 
-# ---- Tên miền ----
-# Mặc định dùng nip.io: jenkins.10.10.90.151.nip.io tự trỏ về 10.10.90.151, không cần DNS nội bộ.
-# Nếu có DNS riêng (vd k8s.congty.local) thì đổi ở đây và tạo bản ghi *.k8s.congty.local -> ingress_ip
-base_domain: "{{ ingress_ip }}.nip.io"
-jenkins_host: "jenkins.{{ base_domain }}"
-argocd_host: "argocd.{{ base_domain }}"
-wordpress_host: "wordpress.{{ base_domain }}"
+# ---- Truy cập: 1 IP, phân theo đường dẫn, HTTPS bằng CA nội bộ ----
+#   https://10.10.90.151           -> WordPress
+#   https://10.10.90.151/argocd    -> Argo CD
+#   https://10.10.90.151/jenkins   -> Jenkins
+# http:// tự chuyển sang https://. Chứng chỉ do CA nội bộ (cert-manager) cấp cho IP ingress_ip;
+# file CA lưu ở k8s-cicd/internal-ca.crt sau khi chạy -> cài vào máy client để hết cảnh báo.
+public_url: "https://{{ ingress_ip }}"
+argocd_path: "/argocd"
+jenkins_path: "/jenkins"
+tls_secret_name: "ingress-tls"
+# Có tên miền nội bộ thì thêm vào đây để chứng chỉ hợp lệ cho cả tên miền (vd ["k8s.congty.local"])
+tls_extra_dns_names: []
 
 # ---- GitHub ----
 github_user: "Jack-mai"
@@ -53,6 +58,7 @@ traefik_chart_version: ""
 argocd_chart_version: "10.10.5"
 jenkins_chart_version: "5.9.70"
 csi_nfs_chart_version: "4.13.5"
+cert_manager_version: "v1.20.2"
 
 # ---- Dung lượng ----
 jenkins_pvc_size: "20Gi"

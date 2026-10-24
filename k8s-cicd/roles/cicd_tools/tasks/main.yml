@@ -19,6 +19,7 @@
     - { name: traefik, url: "https://traefik.github.io/charts" }
     - { name: argo, url: "https://argoproj.github.io/argo-helm" }
     - { name: jenkins, url: "https://charts.jenkins.io" }
+    - { name: jetstack, url: "https://charts.jetstack.io" }
     - { name: csi-driver-nfs, url: "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts" }
   changed_when: false
 

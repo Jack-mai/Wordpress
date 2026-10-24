@@ -5,13 +5,22 @@ metadata:
   name: {{ .Release.Name }}
   labels:
     {{- include "wordpress.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
+    {{- if .Values.ingress.host }}
     - host: {{ .Values.ingress.host | quote }}
       http:
+    {{- else }}
+    # Không khai báo host -> nhận mọi truy cập vào IP của Traefik
+    - http:
+    {{- end }}
         paths:
-          - path: /
+          - path: {{ .Values.ingress.path }}
             pathType: Prefix
             backend:
               service:

@@ -25,7 +25,15 @@ uploads:
 ingress:
   enabled: true
   className: traefik
-  host: wordpress.local
+  host: ""                       # để trống = vào thẳng bằng IP
+  path: /
+  annotations:
+    # Chỉ nhận HTTPS (http:// được Traefik tự chuyển sang https://)
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+
+# Địa chỉ web đầy đủ (WP_HOME / WP_SITEURL). Để trống = theo địa chỉ lưu trong database
+siteUrl: ""
 
 # Thêm dòng vào wp-config.php (vd chặn sửa code qua trang admin)
 wpConfigExtra: |

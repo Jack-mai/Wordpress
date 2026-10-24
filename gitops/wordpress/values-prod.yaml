@@ -12,8 +12,12 @@ imagePullSecrets:
 
 replicaCount: 3
 
+# Vào thẳng bằng IP: https://10.10.90.151 (Argo CD ở /argocd, Jenkins ở /jenkins)
 ingress:
-  host: wordpress.10.10.90.151.nip.io
+  host: ""
+  path: /
+
+siteUrl: "https://10.10.90.151"
 
 uploads:
   size: 20Gi

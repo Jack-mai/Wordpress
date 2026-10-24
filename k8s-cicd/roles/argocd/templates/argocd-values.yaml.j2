@@ -1,20 +1,23 @@
 # {{ ansible_managed }}
 global:
-  domain: {{ argocd_host }}
+  domain: "{{ ingress_ip }}"
 
 configs:
   params:
-    # TLS kết thúc ở Traefik (hoặc chạy http nội bộ) -> argocd-server chạy http
+    # TLS kết thúc ở Traefik -> argocd-server chạy http phía sau
     server.insecure: true
+    # Argo CD chạy dưới đường dẫn con: https://{{ ingress_ip }}{{ argocd_path }}
+    server.basehref: "{{ argocd_path }}"
+    server.rootpath: "{{ argocd_path }}"
   cm:
+    url: "{{ public_url }}{{ argocd_path }}"
     # Kiểm tra repo Git mỗi 60 giây (mặc định 180s)
     timeout.reconciliation: 60s
 
 server:
+  # Ingress theo đường dẫn do Ansible tạo (argocd-ingress.yaml), không dùng ingress của chart
   ingress:
-    enabled: true
-    ingressClassName: traefik
-    hostname: {{ argocd_host }}
+    enabled: false
 
 # Không dùng SSO -> tắt Dex cho nhẹ
 dex:

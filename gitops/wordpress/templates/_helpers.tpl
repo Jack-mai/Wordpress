@@ -17,3 +17,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{ .Release.Name }}-uploads
 {{- end -}}
 {{- end }}
+
+{{- define "wordpress.configExtra" -}}
+{{- with .Values.siteUrl }}
+define('WP_HOME', '{{ . }}');
+define('WP_SITEURL', '{{ . }}');
+{{- end }}
+{{ .Values.wpConfigExtra }}
+{{- end }}

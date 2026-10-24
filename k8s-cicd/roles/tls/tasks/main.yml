@@ -1,0 +1,59 @@
+---
+# HTTPS cho IP nội bộ: CA công cộng (Let's Encrypt) không cấp chứng chỉ cho IP private
+# -> dựng CA nội bộ bằng cert-manager, cấp chứng chỉ cho {{ ingress_ip }}
+- name: Gỡ bản cài cert-manager bị lỗi lần trước (nếu có)
+  ansible.builtin.shell: |
+    set -o pipefail
+    if helm list -n cert-manager --failed --pending -q | grep -qx cert-manager; then
+      helm uninstall cert-manager -n cert-manager --wait && echo REMOVED
+    fi
+  args:
+    executable: /bin/bash
+  register: helm_cleanup_cert_manager
+  changed_when: "'REMOVED' in helm_cleanup_cert_manager.stdout"
+
+- name: Cài cert-manager {{ cert_manager_version }}
+  ansible.builtin.command: >-
+    helm upgrade --install cert-manager jetstack/cert-manager
+    --namespace cert-manager --create-namespace
+    --version {{ cert_manager_version }}
+    --set crds.enabled=true
+    --wait --timeout 10m
+  changed_when: true
+
+- name: Tạo file CA nội bộ + chứng chỉ
+  ansible.builtin.template:
+    src: tls-ca.yaml.j2
+    dest: /root/cicd/tls-ca.yaml
+    mode: "0600"
+
+# Webhook cert-manager cần vài giây sau khi Ready mới nhận request
+- name: Áp dụng CA nội bộ + chứng chỉ cho {{ ingress_ip }}
+  ansible.builtin.command: kubectl apply -f /root/cicd/tls-ca.yaml
+  register: tls_apply
+  until: tls_apply.rc == 0
+  retries: 12
+  delay: 10
+  changed_when: "'created' in tls_apply.stdout or 'configured' in tls_apply.stdout"
+
+- name: Chờ chứng chỉ được cấp
+  ansible.builtin.command: kubectl -n traefik wait certificate/{{ tls_secret_name }} --for=condition=Ready --timeout=180s
+  changed_when: false
+
+- name: Lấy chứng chỉ CA nội bộ
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl -n cert-manager get secret internal-ca -o jsonpath='{.data.ca\.crt}' | base64 -d
+  args:
+    executable: /bin/bash
+  register: tls_ca_cert
+  changed_when: false
+
+# Lưu về máy Ansible để cài vào trình duyệt/máy client
+- name: Lưu internal-ca.crt về máy Ansible
+  ansible.builtin.copy:
+    content: "{{ tls_ca_cert.stdout }}\n"
+    dest: "{{ playbook_dir }}/internal-ca.crt"
+    mode: "0644"
+  delegate_to: localhost
+  become: false

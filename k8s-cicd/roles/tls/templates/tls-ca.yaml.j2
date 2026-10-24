@@ -1,0 +1,59 @@
+# {{ ansible_managed }}
+# CA nội bộ: selfsigned -> tạo chứng chỉ CA -> ClusterIssuer "internal-ca" ký mọi chứng chỉ khác
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: internal-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: "K8s Internal CA"
+  secretName: internal-ca
+  duration: 87600h        # 10 năm
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: internal-ca
+spec:
+  ca:
+    secretName: internal-ca
+---
+# Chứng chỉ cho cửa vào web (Traefik dùng làm chứng chỉ mặc định), tự gia hạn
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ tls_secret_name }}
+  namespace: traefik
+spec:
+  secretName: {{ tls_secret_name }}
+  commonName: "{{ ingress_ip }}"
+  ipAddresses:
+    - "{{ ingress_ip }}"
+{% if tls_extra_dns_names | length > 0 %}
+  dnsNames:
+{% for d in tls_extra_dns_names %}
+    - "{{ d }}"
+{% endfor %}
+{% endif %}
+  duration: 8760h         # 1 năm
+  renewBefore: 720h       # gia hạn trước 30 ngày
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: internal-ca
+    kind: ClusterIssuer

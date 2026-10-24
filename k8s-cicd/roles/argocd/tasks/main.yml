@@ -5,6 +5,17 @@
     dest: /root/cicd/argocd-values.yaml
     mode: "0600"
 
+- name: Gỡ bản cài argocd bị lỗi lần trước (nếu có)
+  ansible.builtin.shell: |
+    set -o pipefail
+    if helm list -n argocd --failed --pending -q | grep -qx argocd; then
+      helm uninstall argocd -n argocd --wait && echo REMOVED
+    fi
+  args:
+    executable: /bin/bash
+  register: helm_cleanup_argocd
+  changed_when: "'REMOVED' in helm_cleanup_argocd.stdout"
+
 - name: Cài Argo CD
   ansible.builtin.command: >-
     helm upgrade --install argocd argo/argo-cd
@@ -13,6 +24,26 @@
     -f /root/cicd/argocd-values.yaml
     --wait --timeout 15m
   changed_when: true
+
+# Đổi đường dẫn (/argocd) cần argocd-server đọc lại cấu hình
+- name: Khởi động lại argocd-server để nhận cấu hình đường dẫn
+  ansible.builtin.command: kubectl -n argocd rollout restart deploy/argocd-server
+  changed_when: true
+
+- name: Chờ argocd-server sẵn sàng
+  ansible.builtin.command: kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
+  changed_when: false
+
+- name: Tạo Ingress Argo CD ({{ argocd_path }})
+  ansible.builtin.template:
+    src: argocd-ingress.yaml.j2
+    dest: /root/cicd/argocd-ingress.yaml
+    mode: "0600"
+
+- name: Áp dụng Ingress Argo CD
+  ansible.builtin.command: kubectl apply -f /root/cicd/argocd-ingress.yaml
+  register: argocd_ingress
+  changed_when: "'created' in argocd_ingress.stdout or 'configured' in argocd_ingress.stdout"
 
 # Cho Argo CD đọc repo Wordpress (chứa Helm chart) - cần vì repo để private
 - name: Tạo credential repo Wordpress cho Argo CD
