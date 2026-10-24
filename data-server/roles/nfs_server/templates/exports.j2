@@ -1,3 +1,0 @@
-# {{ ansible_managed }}
-{{ nfs_export_dir }} {% for c in nfs_allowed_clients %}{{ c }}({{ nfs_export_options }}){% if not loop.last %} {% endif %}{% endfor %}
-
